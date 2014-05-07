@@ -9,25 +9,28 @@ fi
 
 pathtofiles=$1
 
-# convert lossy-- add to list as needed
-for file in "$(find "${pathtofiles}" -regextype posix-extended -iregex ".*(mp3|ogg)")"; do
-	convert "${pathtofiles}${file}" "${pathtofiles}${file}"-converted.flac
+# convert lossy to lossless if needed
+find "${pathtofiles}" -regextype posix-extended -iregex ".*(mp3|ogg).?$" -print0 | while IFS= read -r -d $'\0' file; do
+	sox "${file}" "${file}"-converted.flac
 done
 
 # convert lossless sample rate and precision as needed
-for file in "$(find "${pathtofiles}" -regextype posix-extended -iregex ".*(flac|wav|aiff)")"; do 
+find "${pathtofiles}" -regextype posix-extended -iregex ".*(flac|wav|aif).?$" -print0 | while IFS= read -r -d $'\0' file; do
+	# gather info on file
+	samplerate=$(soxi "${file}" | grep "Sample Rate" | awk '{ print $4 }')
+	precision=$(soxi "${file}" | grep "Precision" | awk '{ gsub ( /-bit/, "" ); print $3 }') 
 	# is sample rate high enough?
-	if [ $(soxi "${pathtofiles}${file}" | grep "Sample Rate" | awk '{ print $4 }') -lt "44100" ]; then
+	if (( samplerate < 44100 )); then
 		# is precision also high enough?
-		if [ $(soxi "${pathtofiles}${file}" | grep "Precision" | awk '{ gsub ( /-bit/, "" ); print $3 }') -lt "16" ]; then
+		if (( precision < 16 )); then
 			# if no to both, then convert both
-			sox "${pathtofiles}${file}" -b 16 -r 44100 "${pathtofiles}${file}"-upsampled-higher_bit.flac
+			sox "${file}" -b 16 -r 44100 "${file}"-upsampled-higher_bit.flac
 		# if not precision, must be sample rate
 		else
 			sox "${file}" -r 44100 "${file}"-upsampled.flac
 		fi
 	# if sample rate is ok, check precision
-	elif [ $(soxi "${pathtofiles}${file}" | grep "Precision" | awk '{ gsub ( /-bit/, "" ); print $3 }') -lt "16" ]; then
-		sox "${pathtofiles}${file}" -b 16 "${pathtofiles}${file}"-upsampled-higher_bit.flac
+	elif (( precision < 16 )); then
+		sox "${file}" -b 16 "${file}"-upsampled-higher_bit.flac
 	fi
 done
